@@ -110,3 +110,15 @@ def test_shipped_square_casting_config_loads_and_runs(tmp_path):
     from transient_poiseuille.cli import main
 
     assert main([str(path)]) == 0
+
+
+def test_unresolved_ramp_is_rejected(tmp_path):
+    cfg = json.loads((Path(__file__).resolve().parents[1] / "configs"
+                      / "copper_square_casting.json").read_text())
+    cfg["numerics"]["dt"] = 5.0
+    cfg["drive"]["V_c"]["ramp"] = 10.0          # 10 s < 5 * 5 s
+    cfg["output"] = {}
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    with pytest.raises(ValueError, match="not resolved"):
+        load_config(path)

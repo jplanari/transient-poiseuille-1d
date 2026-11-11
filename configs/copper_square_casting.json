@@ -16,13 +16,13 @@
       "V_off": 0.0,
       "period": 20000.0,
       "duty": 0.5,
-      "ramp": 1000.0
+      "ramp": 10.0
     }
   },
   "numerics": {
     "Nx": 10,
     "Nr": 60,
-    "dt": 50.0,
+    "dt": 1.0,
     "t_end": 60000.0,
     "theta": 1.0,
     "convection": false

@@ -109,6 +109,13 @@ def load_config(path: str | Path) -> RunConfig:
         raise ValueError("mode 'flow' requires 'drive.V_c'")
     if "V_c" in drive:
         drive_from_config(drive["V_c"])  # validate early, with a clear message
+        vc = drive["V_c"]
+        if isinstance(vc, dict) and float(vc.get("ramp", 0.0)) > 0.0:
+            ramp = float(vc["ramp"])
+            if ramp < 5.0 * float(num["dt"]):
+                raise ValueError(
+                    f"drive.V_c ramp = {ramp:g} s is not resolved with numerics.dt = "
+                    f"{float(num['dt']):g} s: use dt <= ramp / 5")
 
     Nx = int(num.get("Nx", 1))
     Nr = int(num.get("Nr", 40))
