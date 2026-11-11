@@ -29,7 +29,10 @@ Tots els paràmetres es passen en un fitxer JSON (vegeu `configs/`):
 ```bash
 python -m transient_poiseuille configs/copper_pressure_drop.json
 python -m transient_poiseuille configs/copper_flow.json -o results/flow.npz
+python -m transient_poiseuille configs/copper_pressure_drop.json --plot results/velocity.png
 ```
+
+`--plot` escriu un PNG amb el camp u(x, r) (mirall de tot el diàmetre) i els perfils radials, amb les solucions analítiques com a línies discontínues quan s'aplica (μ constant, R constant, pressió imposada). Requereix `matplotlib`.
 
 Estructura:
 

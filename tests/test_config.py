@@ -119,6 +119,26 @@ def test_convection_runs_for_any_axial_resolution(tmp_path, Nx):
     assert main([str(path)]) == 0
 
 
+def test_plot_writes_png_for_pressure_drop_run(tmp_path):
+    pytest.importorskip("matplotlib")
+    cfg = _base(numerics={"Nx": 3, "Nr": 30, "dt": 250.0, "t_end": 2500.0},
+                output={"save_times": [500.0, 1000.0]})
+    path = _write(tmp_path, cfg)
+    png = tmp_path / "velocity.png"
+    assert main([str(path), "--plot", str(png)]) == 0
+    assert png.exists() and png.stat().st_size > 1000
+    assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_plot_writes_png_for_flow_run(tmp_path):
+    pytest.importorskip("matplotlib")
+    cfg = _base(drive={"mode": "flow", "p_in": 0.0, "V_c": 1e-3},
+                numerics={"Nx": 4, "Nr": 30, "dt": 250.0, "t_end": 2500.0})
+    png = tmp_path / "flow.png"
+    assert main([str(_write(tmp_path, cfg)), "--plot", str(png)]) == 0
+    assert png.exists()
+
+
 def test_cli_flow_mode_from_shipped_style_config(tmp_path):
     cfg = _base(drive={"mode": "flow", "p_in": 0.0, "V_c": 1e-3},
                 numerics={"Nx": 4, "Nr": 60, "dt": 250.0, "t_end": 25000.0})

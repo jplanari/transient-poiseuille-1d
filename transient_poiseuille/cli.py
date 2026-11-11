@@ -65,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
                                      description=__doc__.splitlines()[0])
     parser.add_argument("config", help="path to a JSON configuration file")
     parser.add_argument("-o", "--output", help="output .npz file (overrides the config)")
+    parser.add_argument("--plot", metavar="PNG",
+                        help="also write a PNG of the velocity field (needs matplotlib)")
     args = parser.parse_args(argv)
 
     try:
@@ -84,6 +86,16 @@ def main(argv: list[str] | None = None) -> int:
     if out is not None:
         save_result(res, out)
         print(f"saved             : {out}")
+
+    if args.plot:
+        from .plot import plot_velocity
+
+        try:
+            png = plot_velocity(res, cfg.params, args.plot, title=cfg.source.name)
+        except RuntimeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"plot              : {png}")
     return 0
 
 
