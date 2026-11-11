@@ -11,6 +11,7 @@ Example file::
       "output":   {"file": "results/run.npz", "save_times": [500.0, 2500.0]}
     }
 
+"fluid.mu" may be a number or a list with one value per axial cell (length Nx).
 Only "geometry", "fluid", "drive" (mode-dependent) and "numerics" with dt and t_end
 are required. Unknown keys are rejected so that typos do not pass silently.
 Relative output paths are resolved against the directory of the configuration file.
@@ -21,6 +22,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+
+import numpy as np
 
 from .solver import Params
 
@@ -66,6 +69,19 @@ def _positive(value: float, name: str) -> float:
     return value
 
 
+def _load_mu(raw, Nx: int):
+    """Viscosity: a positive number (uniform) or a list with one value per axial cell."""
+    if isinstance(raw, list):
+        mu = np.array([float(v) for v in raw])
+        if mu.shape != (Nx,):
+            raise ValueError(f"'fluid.mu' list must have length numerics.Nx = {Nx}, "
+                             f"got {mu.shape[0]}")
+        if np.any(mu <= 0):
+            raise ValueError("'fluid.mu' values must be positive")
+        return mu
+    return _positive(float(raw), "fluid.mu")
+
+
 def load_config(path: str | Path) -> RunConfig:
     """Read and validate a configuration file. Raises ValueError on bad input."""
     path = Path(path)
@@ -103,7 +119,7 @@ def load_config(path: str | Path) -> RunConfig:
     params = Params(
         R=_positive(float(geom["R"]), "geometry.R"),
         L=_positive(float(geom["L"]), "geometry.L"),
-        mu=_positive(float(fluid["mu"]), "fluid.mu"),
+        mu=_load_mu(fluid["mu"], Nx),
         rho=_positive(float(fluid["rho"]), "fluid.rho"),
         mode=mode,
         dp=float(drive.get("dp", 0.0)),

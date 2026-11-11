@@ -1,0 +1,36 @@
+{
+  "geometry": {
+    "R": 0.05,
+    "L": 1.0
+  },
+  "fluid": {
+    "mu": [
+      0.004,
+      0.004444,
+      0.004889,
+      0.005333,
+      0.005778,
+      0.006222,
+      0.006667,
+      0.007111,
+      0.007556,
+      0.008
+    ],
+    "rho": 8000.0
+  },
+  "drive": {
+    "mode": "pressure_drop",
+    "dp": 0.001
+  },
+  "numerics": {
+    "Nx": 10,
+    "Nr": 60,
+    "dt": 250.0,
+    "t_end": 50000.0,
+    "theta": 0.5,
+    "convection": false
+  },
+  "output": {
+    "file": "../results/copper_mu_gradient.npz"
+  }
+}
