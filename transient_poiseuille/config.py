@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .drive import drive_from_config
 from .solver import Params
 
 _ALLOWED = {
@@ -106,6 +107,15 @@ def load_config(path: str | Path) -> RunConfig:
         raise ValueError("mode 'pressure_drop' requires 'drive.dp'")
     if mode == "flow" and "V_c" not in drive:
         raise ValueError("mode 'flow' requires 'drive.V_c'")
+    if "V_c" in drive:
+        drive_from_config(drive["V_c"])  # validate early, with a clear message
+        vc = drive["V_c"]
+        if isinstance(vc, dict) and float(vc.get("ramp", 0.0)) > 0.0:
+            ramp = float(vc["ramp"])
+            if ramp < 5.0 * float(num["dt"]):
+                raise ValueError(
+                    f"drive.V_c ramp = {ramp:g} s is not resolved with numerics.dt = "
+                    f"{float(num['dt']):g} s: use dt <= ramp / 5")
 
     Nx = int(num.get("Nx", 1))
     Nr = int(num.get("Nr", 40))
@@ -124,7 +134,7 @@ def load_config(path: str | Path) -> RunConfig:
         mode=mode,
         dp=float(drive.get("dp", 0.0)),
         p_in=float(drive.get("p_in", 0.0)),
-        V_c=float(drive.get("V_c", 0.0)),
+        V_c=drive_from_config(drive.get("V_c", 0.0)),
         Nx=Nx,
         Nr=Nr,
         dt=_positive(float(num["dt"]), "numerics.dt"),

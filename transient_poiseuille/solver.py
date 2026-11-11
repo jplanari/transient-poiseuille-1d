@@ -24,8 +24,9 @@ forces one common Q, so G_i = (a_i - Q)/b_i.
 
 Drive modes
 -----------
-"flow":          the outlet mean velocity V_c is prescribed, so Q = pi R^2 V_c.
-                 The pressure is integrated from p_in.
+"flow":          the outlet mean velocity V_c(t) is prescribed, so Q = pi R^2 V_c(t).
+                 V_c may be a number or a callable of time (e.g. a square wave, see
+                 drive.py). The pressure is integrated from p_in.
 "pressure_drop": the total drop dp = p_in - p_out is prescribed. Q is found from
                  sum_i G_i dx = -dp. With constant mu this gives a uniform G.
 
@@ -54,7 +55,7 @@ class Params:
     mode: str = "pressure_drop"   # "pressure_drop" or "flow"
     dp: float = 0.0               # total pressure drop p_in - p_out [Pa] (pressure_drop mode)
     p_in: float = 0.0             # inlet pressure [Pa]
-    V_c: float = 0.0              # outlet mean velocity [m/s] (flow mode)
+    V_c: object = 0.0             # outlet mean velocity [m/s]: number or V(t) callable (flow mode)
     Nx: int = 1                   # axial cells
     Nr: int = 40                  # radial cells
     dt: float = 1.0               # time step [s]
@@ -169,7 +170,11 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
     phi = np.einsum("ijk,k->ij", Minv, np.ones(p.Nr))  # (Nx, Nr): response to unit G
     b = phi @ w                                      # (Nx,): Q response to unit G (> 0)
 
-    Q_target = np.pi * p.R**2 * p.V_c
+    if callable(p.V_c):
+        V_of_t = p.V_c
+    else:
+        V_const = float(p.V_c)
+        V_of_t = lambda _t: V_const  # noqa: E731
 
     nsteps = int(round(p.t_end / p.dt))
     t = np.arange(nsteps + 1) * p.dt
@@ -202,6 +207,7 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
         a = v @ w                                    # (Nx,)
 
         if p.mode == "flow":
+            Q_target = np.pi * p.R**2 * V_of_t(float(t[n + 1]))
             G = (a - Q_target) / b
         else:
             # sum_i G_i dx = -dp  with  G_i = (a_i - Q) / b_i  ->  solve for Q

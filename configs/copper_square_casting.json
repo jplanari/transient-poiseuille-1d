@@ -1,0 +1,33 @@
+{
+  "geometry": {
+    "R": 0.05,
+    "L": 1.0
+  },
+  "fluid": {
+    "mu": 0.004,
+    "rho": 8000.0
+  },
+  "drive": {
+    "mode": "flow",
+    "p_in": 0.0,
+    "V_c": {
+      "type": "square",
+      "V_on": 0.001,
+      "V_off": 0.0,
+      "period": 20000.0,
+      "duty": 0.5,
+      "ramp": 10.0
+    }
+  },
+  "numerics": {
+    "Nx": 10,
+    "Nr": 60,
+    "dt": 1.0,
+    "t_end": 60000.0,
+    "theta": 1.0,
+    "convection": false
+  },
+  "output": {
+    "file": "../results/copper_square_casting.npz"
+  }
+}
