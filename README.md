@@ -22,6 +22,32 @@ du/deta(0) = 0,   u(1) = 0,   G = dp/dx
     i sense fonts, la continuïtat dona `Q_i = pi R^2 V_c` a cada cel·la; `G_i` surt de la
     solució radial i la pressió s'integra des de `p_in`.
 
+## Ús amb fitxer de configuració
+
+Tots els paràmetres es passen en un fitxer JSON (vegeu `configs/`):
+
+```bash
+python -m transient_poiseuille configs/copper_pressure_drop.json
+python -m transient_poiseuille configs/copper_flow.json -o results/flow.npz
+```
+
+Estructura:
+
+```json
+{
+  "geometry": {"R": 0.05, "L": 1.0},
+  "fluid":    {"mu": 0.004, "rho": 8000.0},
+  "drive":    {"mode": "pressure_drop", "dp": 0.001},
+  "numerics": {"Nx": 1, "Nr": 80, "dt": 250.0, "t_end": 25000.0, "theta": 0.5, "convection": false},
+  "output":   {"file": "../results/run.npz", "save_times": [500.0, 2500.0]}
+}
+```
+
+- `drive.mode = "pressure_drop"` requereix `drive.dp`; `"flow"` requereix `drive.V_c` (i opcionalment `p_in`).
+- Les claus desconegudes i els valors no vàlids (negatius, `theta` fora de [0,1], etc.) es rebutgen amb un missatge clar.
+- Les rutes de sortida relatives es resolen respecte al fitxer de configuració.
+- El fitxer `.npz` conté `u_final`, `Q_history`, `G_final`, `p_final`, `p_out` i els instantanis de `save_times`.
+
 ## Verificació
 
 Amb viscositat constant i pèrdua de càrrega donada, el solver recupera:
