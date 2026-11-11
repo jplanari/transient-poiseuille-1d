@@ -1,0 +1,7 @@
+{
+  "geometry": {"R": 0.05, "L": 1.0},
+  "fluid": {"mu": 0.004, "rho": 8000.0},
+  "drive": {"mode": "flow", "p_in": 0.0, "V_c": 0.001},
+  "numerics": {"Nx": 10, "Nr": 60, "dt": 250.0, "t_end": 40000.0, "theta": 0.5, "convection": false},
+  "output": {"file": "../results/copper_flow.npz"}
+}
