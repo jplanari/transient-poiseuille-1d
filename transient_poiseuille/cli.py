@@ -3,7 +3,7 @@
 Usage::
 
     python -m transient_poiseuille configs/copper_pressure_drop.json
-    python -m transient_poiseuille configs/copper_flow.json -o results/flow.npz
+    python -m transient_poiseuille configs/copper_flow.json -o results/flow.npz --plot results/flow.png
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import numpy as np
 
 from . import analytic
 from .config import load_config
-from .solver import Result, solve
+from .solver import Result, is_uniform_mu, mu_reference, solve
 
 
 def save_result(res: Result, path: Path) -> None:
@@ -40,21 +40,30 @@ def save_result(res: Result, path: Path) -> None:
 
 
 def report(cfg, res: Result) -> None:
-    """Print a short summary; compare with Poiseuille when the drive is a pressure drop."""
+    """Print a short summary; compare with Poiseuille when it applies."""
     p = cfg.params
+    mu_ref = mu_reference(p)
+    tau = analytic.viscous_time(p.R, mu_ref, p.rho)
+    uniform = is_uniform_mu(p)
+
     print(f"config            : {cfg.source}")
     print(f"mode              : {p.mode}")
-    print(f"tau = rho R^2/mu  : {analytic.viscous_time(p.R, p.mu, p.rho):.4g} s")
-    print(f"final time        : {res.t[-1]:.6g} s ({res.t[-1] / analytic.viscous_time(p.R, p.mu, p.rho):.3g} tau)")
+    if uniform:
+        print(f"viscosity         : {mu_ref:.4g} Pa s (uniform)")
+    else:
+        mu = np.asarray(p.mu, dtype=float)
+        print(f"viscosity         : {mu.min():.4g} .. {mu.max():.4g} Pa s (varies along x)")
+    print(f"tau = rho R^2/mu  : {tau:.4g} s (mean mu)")
+    print(f"final time        : {res.t[-1]:.6g} s ({res.t[-1] / tau:.3g} tau)")
     print(f"final Q           : {res.Q_history[-1]:.6e} m^3/s")
     print(f"outlet pressure   : {res.p_out:.6e} Pa")
 
-    if p.mode == "pressure_drop":
+    if p.mode == "pressure_drop" and uniform:
         G = -p.dp / p.L
-        u_ex = analytic.steady_profile(res.eta, G, p.R, p.mu)
+        u_ex = analytic.steady_profile(res.eta, G, p.R, mu_ref)
         u_scale = np.max(np.abs(u_ex))
         err_u = np.max(np.abs(res.u_final[0] - u_ex)) / u_scale
-        Q_ex = analytic.steady_flow_rate(G, p.R, p.mu)
+        Q_ex = analytic.steady_flow_rate(G, p.R, mu_ref)
         err_Q = abs(res.Q_history[-1] - Q_ex) / abs(Q_ex)
         print(f"vs Poiseuille     : profile error {err_u:.2e}, flow error {err_Q:.2e}")
         print("                    (meaningful once t_end is several tau)")

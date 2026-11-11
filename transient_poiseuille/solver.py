@@ -1,27 +1,33 @@
-"""Transient axisymmetric flow in a bar of constant radius.
+"""Transient axisymmetric flow in a bar of constant radius, with viscosity mu(x).
 
-For each axial cell (length dx) the radial velocity u(eta, t), with eta = r/R, obeys
+For each axial cell i (length dx) the radial velocity u_i(eta, t), with eta = r/R,
+obeys
 
-    rho * (du/dt + u du/dx) = -G + (mu / R^2) * (1/eta) d/deta (eta du/deta)
+    rho * (du/dt + u du/dx) = -G_i + (mu_i / R^2) * (1/eta) d/deta (eta du/deta)
 
 with  du/deta = 0 at eta = 0 (symmetry),  u = 0 at eta = 1 (wall),
-and G = dp/dx uniform over the section.
+and G_i = dp/dx uniform over the section of cell i. Viscosity mu_i is constant
+over each section, so it may vary along the axis but not across it.
 
 Discretisation
 --------------
 * Radial: cell-centred finite volumes in eta, wall handled with a half-cell ghost.
 * Time: theta-scheme (theta = 0.5 Crank-Nicolson, theta = 1 backward Euler).
-* Convection (optional): explicit, first-order upwind in x, evaluated with the
-  previous step's velocity. Requires the CFL condition max|u| dt / dx <= 1, which
-  the solver checks at every step.
+* Convection (optional): explicit, first-order upwind in x, lagged. Requires the
+  CFL condition max|u| dt / dx <= 1, checked at every step.
+
+Coupling along the axis
+-----------------------
+Each cell gives Q_i = a_i - b_i G_i, with a_i the flow from the previous state and
+b_i = pi R^4 / (8 mu_i) in the steady limit. Continuity (constant R, no source)
+forces one common Q, so G_i = (a_i - Q)/b_i.
 
 Drive modes
 -----------
-"pressure_drop": G = -dp/L is prescribed. Used to check against Poiseuille.
-"flow":          outlet mean velocity V_c and inlet pressure p_in are prescribed.
-                 With constant R and no source terms, continuity forces
-                 Q_i = pi R^2 V_c in every cell, so G_i follows from the radial solve
-                 and the pressure is integrated from p_in.
+"flow":          the outlet mean velocity V_c is prescribed, so Q = pi R^2 V_c.
+                 The pressure is integrated from p_in.
+"pressure_drop": the total drop dp = p_in - p_out is prescribed. Q is found from
+                 sum_i G_i dx = -dp. With constant mu this gives a uniform G.
 
 Units are SI throughout.
 """
@@ -35,15 +41,19 @@ import numpy as np
 
 @dataclass
 class Params:
-    """Input data for :func:`solve`."""
+    """Input data for :func:`solve`.
+
+    ``mu`` is either a scalar (uniform viscosity) or an array of length ``Nx``
+    giving the viscosity of each axial cell.
+    """
 
     R: float                      # radius [m]
     L: float                      # bar length [m]
-    mu: float                     # dynamic viscosity [Pa s]
+    mu: object                    # viscosity [Pa s]: scalar or array of length Nx
     rho: float                    # density [kg/m^3]
     mode: str = "pressure_drop"   # "pressure_drop" or "flow"
-    dp: float = 0.0               # pressure drop p_in - p_out [Pa] (pressure_drop mode)
-    p_in: float = 0.0             # inlet pressure [Pa] (flow mode; reference otherwise)
+    dp: float = 0.0               # total pressure drop p_in - p_out [Pa] (pressure_drop mode)
+    p_in: float = 0.0             # inlet pressure [Pa]
     V_c: float = 0.0              # outlet mean velocity [m/s] (flow mode)
     Nx: int = 1                   # axial cells
     Nr: int = 40                  # radial cells
@@ -67,6 +77,29 @@ class Result:
     p_final: np.ndarray           # pressure at axial cell centres at t_end [Pa]
     p_out: float                  # pressure at the outlet face at t_end [Pa]
     snapshots: dict = field(default_factory=dict)  # time -> (Nx, Nr) field
+
+
+def mu_per_station(p: Params) -> np.ndarray:
+    """Viscosity of each axial cell, shape (Nx,). Validates the input."""
+    mu = np.asarray(p.mu, dtype=float)
+    if mu.ndim == 0:
+        mu = np.full(p.Nx, float(mu))
+    elif mu.shape != (p.Nx,):
+        raise ValueError(f"mu must be a scalar or have length Nx = {p.Nx}, got {mu.shape[0]}")
+    if np.any(~np.isfinite(mu)) or np.any(mu <= 0.0):
+        raise ValueError("mu must be finite and positive")
+    return mu
+
+
+def mu_reference(p: Params) -> float:
+    """Mean viscosity, used for time scales and summaries."""
+    return float(np.mean(mu_per_station(p)))
+
+
+def is_uniform_mu(p: Params) -> bool:
+    """True when every axial cell has the same viscosity."""
+    mu = mu_per_station(p)
+    return bool(np.all(mu == mu[0]))
 
 
 def radial_operator(Nr: int, R: float, mu: float) -> np.ndarray:
@@ -120,6 +153,7 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
         raise ValueError("theta must lie in [0, 1]")
     if p.convection and p.Nx < 2:
         raise ValueError("convection requires Nx >= 2")
+    mu = mu_per_station(p)
 
     dx = p.L / p.Nx
     x = (np.arange(p.Nx) + 0.5) * dx
@@ -127,14 +161,15 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
     eta = (np.arange(p.Nr) + 0.5) * deta
     w = 2.0 * np.pi * p.R**2 * eta * deta  # Q = w @ u
 
-    Lm = radial_operator(p.Nr, p.R, p.mu)
-    M = (p.rho / p.dt) * np.eye(p.Nr) - p.theta * Lm
-    Minv = np.linalg.inv(M)
-    phi = Minv @ np.ones(p.Nr)   # response of u to a unit pressure gradient
-    b = w @ phi                  # Q response to a unit pressure gradient (negative)
+    # radial operator per unit viscosity; the station operator is mu_i * Lunit
+    Lunit = radial_operator(p.Nr, p.R, 1.0)
+    I = np.eye(p.Nr)
+    M = (p.rho / p.dt) * I[None, :, :] - p.theta * mu[:, None, None] * Lunit[None, :, :]
+    Minv = np.linalg.inv(M)                          # (Nx, Nr, Nr)
+    phi = np.einsum("ijk,k->ij", Minv, np.ones(p.Nr))  # (Nx, Nr): response to unit G
+    b = phi @ w                                      # (Nx,): Q response to unit G (> 0)
 
     Q_target = np.pi * p.R**2 * p.V_c
-    G0 = -p.dp / p.L
 
     nsteps = int(round(p.t_end / p.dt))
     t = np.arange(nsteps + 1) * p.dt
@@ -146,7 +181,7 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
     snapshots: dict = {}
     Q_hist = np.zeros(nsteps + 1)
     Q_hist[0] = np.mean(u @ w)
-    G = np.full(p.Nx, G0)
+    G = np.zeros(p.Nx)
 
     for n in range(nsteps):
         if p.convection:
@@ -161,15 +196,19 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
         else:
             dudx = np.zeros_like(u)
 
-        rhs = (p.rho / p.dt) * u + (1.0 - p.theta) * (u @ Lm.T) - p.rho * u * dudx
-        v = rhs @ Minv.T                      # solution with G = 0
+        Lu = mu[:, None] * (u @ Lunit.T)             # (mu_i / R^2) Lm u_i
+        rhs = (p.rho / p.dt) * u + (1.0 - p.theta) * Lu - p.rho * u * dudx
+        v = np.einsum("ijk,ik->ij", Minv, rhs)       # solution with G = 0
+        a = v @ w                                    # (Nx,)
 
-        if p.mode == "pressure_drop":
-            G = np.full(p.Nx, G0)
+        if p.mode == "flow":
+            G = (a - Q_target) / b
         else:
-            G = ((v @ w) - Q_target) / b      # enforce Q_i = pi R^2 V_c
+            # sum_i G_i dx = -dp  with  G_i = (a_i - Q) / b_i  ->  solve for Q
+            Q = (np.sum(a / b) * dx + p.dp) / (np.sum(1.0 / b) * dx)
+            G = (a - Q) / b
 
-        u = v - G[:, None] * phi[None, :]
+        u = v - G[:, None] * phi
         Q_hist[n + 1] = np.mean(u @ w)
         if (n + 1) in save_steps:
             snapshots[float(t[n + 1])] = u.copy()
