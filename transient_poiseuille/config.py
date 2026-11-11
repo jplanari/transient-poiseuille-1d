@@ -95,6 +95,10 @@ def load_config(path: str | Path) -> RunConfig:
     Nr = int(num.get("Nr", 40))
     if Nx < 1 or Nr < 2:
         raise ValueError("'numerics.Nx' must be >= 1 and 'numerics.Nr' >= 2")
+    convection = bool(num.get("convection", False))
+    if convection and Nx < 2:
+        raise ValueError("'numerics.convection' requires 'numerics.Nx' >= 2 "
+                         "(there is no axial gradient with a single cell)")
 
     params = Params(
         R=_positive(float(geom["R"]), "geometry.R"),
@@ -110,7 +114,7 @@ def load_config(path: str | Path) -> RunConfig:
         dt=_positive(float(num["dt"]), "numerics.dt"),
         t_end=_positive(float(num["t_end"]), "numerics.t_end"),
         theta=float(num.get("theta", 0.5)),
-        convection=bool(num.get("convection", False)),
+        convection=convection,
         save_times=tuple(float(t) for t in out.get("save_times", [])),
     )
     if params.mode not in ("pressure_drop", "flow"):
