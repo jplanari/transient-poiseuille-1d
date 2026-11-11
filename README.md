@@ -72,8 +72,19 @@ python examples/verify_poiseuille.py  # informe numèric
 pip install -r requirements.txt
 ```
 
+## Viscositat variable al llarg de x
+
+`fluid.mu` pot ser un número o una llista amb un valor per cel·la axial (`Nx` valors). Vegeu `configs/copper_mu_gradient.json`.
+
+- Cada cel·la és una secció de Poiseuille amb la seva μ_i. El flux és comú (R constant) i `G_i = (a_i - Q) / b_i`.
+- Mode `flow`: `G_i = -8 μ_i V_c / R^2`.
+- Mode `pressure_drop`: `Q = π R^4 Δp / (8 Σ μ_i Δx)`, i.e. una sèrie de resistències. El gradient es reparteix proporcionalment a μ_i.
+- Amb R constant, la velocitat mitjana és la mateixa a totes les cel·les: només canvia el gradient de pressió, no el perfil de velocitats.
+- Les proves estacionàries usen θ = 1 (Euler implícit). Amb Crank–Nicolson, l'arrencada excita modes radials ràpids que no s'amortitzen, i queda una dispersió d'uns 10⁻⁵ en G/μ amb dt = 250 s.
+
 ## Pendent
 
 - Afegir l'equació de l'energia i la solidificació (`A(x,t)` i terme font `S`).
 - Radi variable `R(x,t)`: el codi actual suposa radi constant, així que `dR/dt` i `dR/dx` no hi són.
+- μ que depèn de (x, r), per exemple amb temperatura radial o zona pastosa.
 - Verificar el terme convectiu contra un cas amb `R(x)` lentament variable.

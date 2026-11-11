@@ -5,7 +5,7 @@ Left panel: axial-radial map of the axial velocity u(x, r) over the full diamete
 
 Right panel: radial profiles u(r) at the saved times and at the final time, with
 the analytical Poiseuille and start-up profiles as dashed lines when they apply
-(constant viscosity, constant radius, pressure-drop drive).
+(uniform viscosity, constant radius, pressure-drop drive).
 
 Uses matplotlib's Figure/Agg API directly, so it works without a display.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from . import analytic
-from .solver import Params, Result
+from .solver import Params, Result, is_uniform_mu, mu_reference
 
 _MM_PER_M = 1.0e3
 
@@ -36,6 +36,10 @@ def plot_velocity(res: Result, p: Params, out: str | Path, title: str | None = N
     Figure, FigureCanvasAgg = _figure_classes()
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    mu_ref = mu_reference(p)
+    uniform = is_uniform_mu(p)
+    tau = analytic.viscous_time(p.R, mu_ref, p.rho)
 
     fig = Figure(figsize=(12, 5), layout="constrained")
     FigureCanvasAgg(fig)
@@ -67,17 +71,17 @@ def plot_velocity(res: Result, p: Params, out: str | Path, title: str | None = N
     ref_station = 0
     for k, t in enumerate(times):
         ax_prof.plot(r_mm, res.snapshots[t][ref_station] * _MM_PER_M,
-                     color=colours[k], label=f"t = {t / analytic.viscous_time(p.R, p.mu, p.rho):.2f} τ")
+                     color=colours[k], label=f"t = {t / tau:.2f} τ")
     ax_prof.plot(r_mm, res.u_final[ref_station] * _MM_PER_M, color=colours[-1],
-                 label=f"t = {res.t[-1] / analytic.viscous_time(p.R, p.mu, p.rho):.2f} τ (final)")
+                 label=f"t = {res.t[-1] / tau:.2f} τ (final)")
 
-    if p.mode == "pressure_drop":
+    if p.mode == "pressure_drop" and uniform:
         G = -p.dp / p.L
         eta = res.eta
-        ax_prof.plot(r_mm, analytic.steady_profile(eta, G, p.R, p.mu) * _MM_PER_M,
+        ax_prof.plot(r_mm, analytic.steady_profile(eta, G, p.R, mu_ref) * _MM_PER_M,
                      "k--", lw=1, label="Poiseuille (estacionari)")
         for k, t in enumerate(times):
-            u_ex = analytic.transient_profile(eta, t, G, p.R, p.mu, p.rho)
+            u_ex = analytic.transient_profile(eta, t, G, p.R, mu_ref, p.rho)
             ax_prof.plot(r_mm, u_ex * _MM_PER_M, ":", color=colours[k], lw=1)
 
     ax_prof.set_xlabel("r [mm]")
