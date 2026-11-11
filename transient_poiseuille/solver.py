@@ -132,7 +132,8 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
 
     for n in range(nsteps):
         if p.convection:
-            dudx = np.gradient(u, dx, axis=0, edge_order=2)
+            # np.gradient needs at least edge_order + 1 points along the axis
+            dudx = np.gradient(u, dx, axis=0, edge_order=2 if p.Nx >= 3 else 1)
         else:
             dudx = np.zeros_like(u)
 

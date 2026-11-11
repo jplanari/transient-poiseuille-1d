@@ -103,6 +103,22 @@ def test_cli_returns_error_code_for_bad_config(tmp_path, capsys):
     assert "error" in capsys.readouterr().err
 
 
+def test_convection_with_single_cell_is_rejected_by_config(tmp_path):
+    cfg = _base(numerics={"Nx": 1, "Nr": 30, "dt": 250.0, "t_end": 1000.0,
+                          "convection": True})
+    with pytest.raises(ValueError, match="convection"):
+        load_config(_write(tmp_path, cfg))
+
+
+@pytest.mark.parametrize("Nx", [2, 3, 10])
+def test_convection_runs_for_any_axial_resolution(tmp_path, Nx):
+    """Regression: Nx=2 used to crash in np.gradient (edge_order=2 needs 3 points)."""
+    cfg = _base(numerics={"Nx": Nx, "Nr": 30, "dt": 250.0, "t_end": 1000.0,
+                          "convection": True})
+    path = _write(tmp_path, cfg)
+    assert main([str(path)]) == 0
+
+
 def test_cli_flow_mode_from_shipped_style_config(tmp_path):
     cfg = _base(drive={"mode": "flow", "p_in": 0.0, "V_c": 1e-3},
                 numerics={"Nx": 4, "Nr": 60, "dt": 250.0, "t_end": 25000.0})
