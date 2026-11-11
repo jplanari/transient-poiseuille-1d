@@ -73,7 +73,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    res = solve(cfg.params)
+    try:
+        res = solve(cfg.params)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     report(cfg, res)
 
     out = Path(args.output) if args.output else cfg.output_file
