@@ -11,7 +11,9 @@ Discretisation
 --------------
 * Radial: cell-centred finite volumes in eta, wall handled with a half-cell ghost.
 * Time: theta-scheme (theta = 0.5 Crank-Nicolson, theta = 1 backward Euler).
-* Convection (optional): treated explicitly with the previous step's velocity.
+* Convection (optional): explicit, first-order upwind in x, evaluated with the
+  previous step's velocity. Requires the CFL condition max|u| dt / dx <= 1, which
+  the solver checks at every step.
 
 Drive modes
 -----------
@@ -94,6 +96,22 @@ def radial_operator(Nr: int, R: float, mu: float) -> np.ndarray:
     return (mu / R**2) * Lm
 
 
+def _upwind_dudx(u: np.ndarray, dx: float) -> np.ndarray:
+    """First-order upwind approximation of du/dx along the axis (axis 0).
+
+    The stencil follows the sign of u: backward difference where u >= 0, forward
+    where u < 0. No upstream value exists at the ends, so the derivative is set to
+    zero there. Centred differences are avoided because the explicit centred
+    advection scheme is unconditionally unstable.
+    """
+    back = np.zeros_like(u)
+    fwd = np.zeros_like(u)
+    diff = (u[1:] - u[:-1]) / dx
+    back[1:] = diff
+    fwd[:-1] = diff
+    return np.where(u >= 0.0, back, fwd)
+
+
 def solve(p: Params, u0: np.ndarray | None = None) -> Result:
     """Advance the transient problem from u0 (default: fluid at rest) to p.t_end."""
     if p.mode not in ("pressure_drop", "flow"):
@@ -132,8 +150,14 @@ def solve(p: Params, u0: np.ndarray | None = None) -> Result:
 
     for n in range(nsteps):
         if p.convection:
-            # np.gradient needs at least edge_order + 1 points along the axis
-            dudx = np.gradient(u, dx, axis=0, edge_order=2 if p.Nx >= 3 else 1)
+            umax = float(np.max(np.abs(u)))
+            cfl = umax * p.dt / dx
+            if cfl > 1.0:
+                raise ValueError(
+                    f"convective CFL = {cfl:.2f} > 1 at t = {t[n]:.4g} s: the explicit "
+                    f"upwind convection would be unstable; reduce numerics.dt to "
+                    f"<= {dx / umax:.3g} s")
+            dudx = _upwind_dudx(u, dx)
         else:
             dudx = np.zeros_like(u)
 

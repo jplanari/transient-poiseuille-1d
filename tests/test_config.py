@@ -139,6 +139,30 @@ def test_plot_writes_png_for_flow_run(tmp_path):
     assert png.exists()
 
 
+def test_convection_upwind_is_stable_and_reaches_poiseuille_flow():
+    """Regression: centred explicit convection diverged for V_c = 10 mm/s.
+    Upwind with CFL <= 1 must stay finite and give the analytical flow rate."""
+    from transient_poiseuille.solver import Params, solve
+
+    prm = Params(R=0.05, L=1.0, mu=0.004, rho=8000.0, mode="flow", p_in=0.0,
+                 V_c=0.01, Nx=10, Nr=60, dt=2.0, t_end=4000.0, theta=0.5,
+                 convection=True)
+    res = solve(prm)
+    assert np.isfinite(res.u_final).all()
+    Q_ex = np.pi * prm.R**2 * prm.V_c
+    assert res.Q_history[-1] == pytest.approx(Q_ex, rel=1e-6)
+
+
+def test_convection_cfl_violation_raises_clear_error():
+    from transient_poiseuille.solver import Params, solve
+
+    prm = Params(R=0.05, L=1.0, mu=0.004, rho=8000.0, mode="flow", p_in=0.0,
+                 V_c=0.01, Nx=10, Nr=60, dt=250.0, t_end=40000.0, theta=0.5,
+                 convection=True)
+    with pytest.raises(ValueError, match="CFL"):
+        solve(prm)
+
+
 def test_cli_flow_mode_from_shipped_style_config(tmp_path):
     cfg = _base(drive={"mode": "flow", "p_in": 0.0, "V_c": 1e-3},
                 numerics={"Nx": 4, "Nr": 60, "dt": 250.0, "t_end": 25000.0})
